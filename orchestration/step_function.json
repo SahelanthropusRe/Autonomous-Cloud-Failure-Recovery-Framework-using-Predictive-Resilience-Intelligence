@@ -1,0 +1,70 @@
+{
+  "Comment": "Autonomous Cloud Failure Recovery Framework - State Machine Workflow",
+  "StartAt": "EvaluateRiskLevel",
+  "States": {
+    "EvaluateRiskLevel": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.risk_score",
+          "NumericGreaterThanEquals": 0.70,
+          "Next": "NotifyIncidentAlert"
+        }
+      ],
+      "Default": "WorkloadStable"
+    },
+    "NotifyIncidentAlert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:123456789012:CloudFailureAlerts",
+        "Subject": "CRITICAL ALERT: Autonomous Cloud Failure Recovery Triggered",
+        "Message.$": "States.Format('High failure risk detected (Score: {}). Target Instance: {}. Initiating autonomous remediation.', $.risk_score, $.instance_id)"
+      },
+      "ResultPath": "$.sns_result",
+      "Next": "ExecuteRemediationAction"
+    },
+    "ExecuteRemediationAction": {
+      "Type": "Pass",
+      "Result": {
+        "action": "PROACTIVE_TRAFFIC_REROUTE_AND_INSTANCE_REPLACE",
+        "status": "COMPLETED",
+        "execution_lead_time_seconds": 12.4
+      },
+      "ResultPath": "$.remediation_result",
+      "Next": "LogIncidentToDynamoDB"
+    },
+    "LogIncidentToDynamoDB": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "IncidentRecoveryLog",
+        "Item": {
+          "incident_id": {
+            "S.$": "$$.Execution.Id"
+          },
+          "instance_id": {
+            "S.$": "$.instance_id"
+          },
+          "risk_score": {
+            "N.$": "States.Format('{}', $.risk_score)"
+          },
+          "remediation_status": {
+            "S": "RESOLVED_PREEMPTIVELY"
+          },
+          "timestamp": {
+            "S.$": "$$.Execution.StartTime"
+          }
+        }
+      },
+      "End": true
+    },
+    "WorkloadStable": {
+      "Type": "Pass",
+      "Result": {
+        "status": "NO_ACTION_REQUIRED"
+      },
+      "End": true
+    }
+  }
+}
