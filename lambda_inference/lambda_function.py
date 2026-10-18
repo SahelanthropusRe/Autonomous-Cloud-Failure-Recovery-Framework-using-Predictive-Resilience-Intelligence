@@ -56,7 +56,7 @@ def lambda_handler(event, context):
         mem_slope=mem_slope,
         scheduling_class=scheduling_class
     )
-
+    
     action_triggered = risk_score >= RISK_THRESHOLD
 
     result = {
